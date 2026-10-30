@@ -1,5 +1,6 @@
 local get_filter_updater = require("filter_updaters")
 local fh_util = require("fh_util")
+local add_possible_circuit_items = require("circuit_items")
 
 ---@param hook_name string
 ---@param entity LuaEntity
@@ -468,22 +469,12 @@ end
 ---@param items table <string, ItemWithQuality>
 ---Adds to the filter item list based on the connected circuit signals
 function FilterHelper.add_items_circuit(entity, items)
-    if entity.get_control_behavior() then
-        local control = entity.get_control_behavior()
-        if control and (
-            control.type == defines.control_behavior.type.generic_on_off
-                or control.type == defines.control_behavior.type.inserter
-        ) then
-            local signals = entity.get_signals(defines.wire_connector_id.circuit_red, defines.wire_connector_id.circuit_green)
-            if signals then
-                for _, signal in pairs(signals) do
-                    local signal_id = signal.signal
-                    if signal_id.name and (signal_id.type == "item" or not signal_id.type) then
-                        fh_util.add_item_to_table(items, signal_id)
-                    end
-                end
-            end
-        end
+    local control = entity.get_control_behavior()
+    if control and (
+        control.type == defines.control_behavior.type.generic_on_off
+            or control.type == defines.control_behavior.type.inserter
+    ) then
+        add_possible_circuit_items(entity, items)
     end
 end
 
