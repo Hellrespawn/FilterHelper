@@ -287,6 +287,32 @@ local function crafter_has_quality(entity)
     return false
 end
 
+---@param entity LuaEntity
+---@param items table<string, ItemWithQuality>
+---Adds configured logistic requests or the storage filter without following inserters
+function FilterHelper.add_items_logistic_chest_configuration(entity, items)
+    if fh_util.get_effective_type(entity) ~= "logistic-container" then
+        return
+    end
+
+    local mode = fh_util.get_effective_prototype(entity).logistic_mode
+    if mode == "storage" then
+        fh_util.add_item_to_table(items, entity.storage_filter)
+    elseif mode == "requester" or mode == "buffer" then
+        local point = entity.get_logistic_point(defines.logistic_member_index.logistic_container)
+        if point then
+            for _, section in pairs(point.sections) do
+                for _, filter in pairs(section.filters) do
+                    local value = filter.value
+                    if value and (value.type == "item" or not value.type) then
+                        fh_util.add_item_to_table(items, value)
+                    end
+                end
+            end
+        end
+    end
+end
+
 ---@param target LuaEntity
 ---@param items table<string, ItemWithQuality>
 ---Adds to the filter item list based on an entity being taken from
@@ -303,6 +329,7 @@ function FilterHelper.add_items_pickup_target_entity(target, items)
         inventory = target.cargo_bay_connection_owner.get_output_inventory()
     end
     add_inventory_items(items, inventory)
+    FilterHelper.add_items_logistic_chest_configuration(target, items)
     FilterHelper.add_items_assembling_machine_output(target, items)
     FilterHelper.add_items_fuel_entity_output(target, items)
     FilterHelper.add_items_transport_belt_connectable(target, items)
@@ -384,6 +411,7 @@ function FilterHelper.add_items_drop_target_entity(target, items)
         return
     end
 
+    FilterHelper.add_items_logistic_chest_configuration(target, items)
     if contains({ "assembling-machine", "rocket-silo" }, fh_util.get_effective_type(target)) then
         local recipe, quality = target.get_recipe()
         if recipe then
@@ -498,9 +526,18 @@ function FilterHelper.add_items_chest(entity, items)
         local bb = entity.bounding_box
         local distance = 3
         local area = { { bb.left_top.x - distance, bb.left_top.y - distance }, { bb.right_bottom.x + distance, bb.right_bottom.y + distance } }
+        local mode = fh_util.get_effective_type(entity) == "logistic-container"
+            and fh_util.get_effective_prototype(entity).logistic_mode
 
         for _, inserter in pairs(entity.surface.find_entities_filtered { type = "inserter", area = area }) do
             if inserter.pickup_target == entity or inserter.drop_target == entity then
+                if inserter.use_filters and inserter.inserter_filter_mode == "whitelist"
+                    and ((mode == "storage" and inserter.drop_target == entity)
+                        or ((mode == "requester" or mode == "buffer") and inserter.pickup_target == entity)) then
+                    for slot = 1, inserter.filter_slot_count do
+                        fh_util.add_item_to_table(items, inserter.get_filter(slot))
+                    end
+                end
                 FilterHelper.add_items_inserter(inserter, items, true, entity)
             end
         end
